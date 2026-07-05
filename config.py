@@ -17,7 +17,7 @@ GMAIL_SCOPES = [
 ]
 
 # --- AI Providers ---
-GEMINI_API_KEY = "AIzaSyB7UmQqBETJu3d3uUo4KU0E4-xHtZnW-QU"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 LMSTUDIO_BASE_URL = os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234")
 LMSTUDIO_MODEL = os.getenv("LMSTUDIO_MODEL", "qwen3.5-4b")
