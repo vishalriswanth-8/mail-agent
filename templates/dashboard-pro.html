@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered Gmail management with autonomous agent">
+    <title>Mail Agent Pro - AI Email Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style-pro.css">
+</head>
+<body>
+    <!-- ============ TOP NAVIGATION ============ -->
+    <nav class="top-nav">
+        <div class="nav-left">
+            <div class="logo">
+                <div class="logo-icon">✉️</div>
+                <span class="logo-text">Mail Agent Pro</span>
+            </div>
+        </div>
+        <div class="nav-right">
+            <div class="scope-selector">
+                <label>Scope:</label>
+                <select id="scope-toggle">
+                    <option value="professional">Professional</option>
+                    <option value="personal">Personal</option>
+                    <option value="formal">Formal</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="casual">Casual</option>
+                </select>
+            </div>
+            <div class="scope-selector" style="margin-left:8px;">
+                <label style="font-weight:600;">Ask Mail:</label>
+                <input id="quick-search" type="text" placeholder="e.g. riswanth" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border-color);" />
+                <button class="btn-icon" id="btn-quick-search" title="Search">🔎</button>
+            </div>
+            <div class="account-selector">
+                <select id="account-selector">
+                    <option value="">All Accounts</option>
+                </select>
+            </div>
+            <button class="btn-icon" id="btn-settings" title="Settings">⚙️</button>
+        </div>
+    </nav>
+
+    <!-- ============ MAIN CONTAINER ============ -->
+    <div class="main-container">
+        <!-- ============ SIDEBAR ============ -->
+        <aside class="sidebar-pro">
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">📊 Views</h3>
+                <button class="nav-btn active" data-view="dashboard">
+                    <span class="icon">📨</span>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-btn" data-view="agent">
+                    <span class="icon">🤖</span>
+                    <span>Agent</span>
+                </button>
+                <button class="nav-btn" data-view="chat">
+                    <span class="icon">💬</span>
+                    <span>Chat</span>
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">⚡ Quick Actions</h3>
+                <button class="action-btn" id="btn-sync">
+                    <span>🔄 Sync Now</span>
+                </button>
+                <button class="action-btn" id="btn-add-account">
+                    <span>➕ Add Account</span>
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">📈 Stats</h3>
+                <div class="stat-mini">
+                    <div class="stat-label">Total</div>
+                    <div class="stat-value" id="stat-total">0</div>
+                </div>
+                <div class="stat-mini">
+                    <div class="stat-label">Unread</div>
+                    <div class="stat-value alert" id="stat-unread">0</div>
+                </div>
+                <div class="stat-mini">
+                    <div class="stat-label">Critical</div>
+                    <div class="stat-value critical" id="stat-critical">0</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============ CONTENT AREA ============ -->
+        <main class="content-area">
+            <!-- ============ DASHBOARD VIEW ============ -->
+            <section id="view-dashboard" class="view active">
+                <div class="view-header">
+                    <h1>📨 Email Dashboard</h1>
+                    <p>Organized view of all your categorized emails</p>
+                </div>
+
+                <!-- Priority Sections -->
+                <div class="dashboard-grid">
+                    <!-- Critical Emails -->
+                    <div class="priority-section priority-critical">
+                        <div class="section-header">
+                            <h2>🚨 CRITICAL</h2>
+                            <span class="badge" id="count-critical">0</span>
+                        </div>
+                        <div class="email-list" id="list-critical">
+                            <div class="empty-state">No critical emails</div>
+                        </div>
+                    </div>
+
+                    <!-- Important Emails -->
+                    <div class="priority-section priority-important">
+                        <div class="section-header">
+                            <h2>⭐ IMPORTANT</h2>
+                            <span class="badge" id="count-important">0</span>
+                        </div>
+                        <div class="email-list" id="list-important">
+                            <div class="empty-state">No important emails</div>
+                        </div>
+                    </div>
+
+                    <!-- Normal Emails -->
+                    <div class="priority-section priority-normal">
+                        <div class="section-header">
+                            <h2>📌 NORMAL</h2>
+                            <span class="badge" id="count-normal">0</span>
+                        </div>
+                        <div class="email-list" id="list-normal">
+                            <div class="empty-state">No normal emails</div>
+                        </div>
+                    </div>
+
+                    <!-- Low Priority -->
+                    <div class="priority-section priority-low">
+                        <div class="section-header">
+                            <h2>🔹 LOW</h2>
+                            <span class="badge" id="count-low">0</span>
+                        </div>
+                        <div class="email-list" id="list-low">
+                            <div class="empty-state">No low priority emails</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ AGENT VIEW ============ -->
+            <section id="view-agent" class="view">
+                <div class="view-header">
+                    <h1>🤖 Autonomous Agent</h1>
+                    <p>AI-powered task suggestions and draft replies</p>
+                </div>
+
+                <div class="agent-container">
+                    <!-- Tasks Section -->
+                    <div class="agent-panel">
+                        <div class="panel-header">
+                            <h2>✅ Suggested Tasks</h2>
+                            <small id="task-count">0 pending</small>
+                        </div>
+                        <div class="panel-content" id="task-list">
+                            <div class="empty-state">
+                                <p>📭 No suggested tasks</p>
+                                <small>Click on an email to see suggested actions</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions Section -->
+                    <div class="agent-panel">
+                        <div class="panel-header">
+                            <h2>💡 Suggestions</h2>
+                            <small id="suggestion-count">0 available</small>
+                        </div>
+                        <div class="panel-content" id="suggestion-list">
+                            <div class="empty-state">
+                                <p>💭 No suggestions available</p>
+                                <small>Agent will suggest actions when analyzing emails</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Email Details -->
+                <div id="agent-email-detail" class="agent-detail hidden">
+                    <div class="detail-header">
+                        <button class="btn-close" id="btn-close-detail">✕</button>
+                        <h3 id="detail-subject">Email Subject</h3>
+                    </div>
+                    <div class="detail-body">
+                        <div class="detail-meta">
+                            <div class="meta-row">
+                                <span class="label">From:</span>
+                                <span class="value" id="detail-from"></span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Category:</span>
+                                <span class="badge" id="detail-category"></span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Priority:</span>
+                                <span class="badge" id="detail-priority"></span>
+                            </div>
+                        </div>
+                        <div class="detail-summary">
+                            <h4>Summary</h4>
+                            <p id="detail-summary"></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ CHAT VIEW ============ -->
+            <section id="view-chat" class="view">
+                <div class="view-header">
+                    <h1>💬 Email Chat Assistant</h1>
+                    <p>Ask questions and get instant answers about your emails</p>
+                </div>
+
+                <div class="chat-container">
+                    <div class="chat-window" id="chat-messages">
+                        <div class="chat-message greeting">
+                            <div class="message-content">
+                                <p>👋 Hi! I'm your Email Assistant. I can help you with your emails.</p>
+                                <p><small>Ask me about specific emails, get suggestions, or need help drafting replies?</small></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="input-wrapper">
+                            <input type="text" id="chat-input" placeholder="Ask me anything about your emails..." />
+                            <button class="btn-send" id="btn-send-message">Send</button>
+                        </div>
+                        <small class="input-hint">💡 Tip: Ask "What are my critical emails?" or "Draft a reply to the latest email"</small>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ============ EMAIL DETAIL MODAL ============ -->
+    <div id="email-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-subject">Email Subject</h2>
+                <button class="btn-close-modal" id="btn-close-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="email-meta">
+                    <div><strong>From:</strong> <span id="modal-from"></span></div>
+                    <div><strong>To:</strong> <span id="modal-to"></span></div>
+                    <div><strong>Date:</strong> <span id="modal-date"></span></div>
+                    <div><strong>Category:</strong> <span id="modal-category"></span> | <strong>Priority:</strong> <span id="modal-priority"></span></div>
+                </div>
+                <div class="email-summary">
+                    <h3>Summary</h3>
+                    <p id="modal-summary"></p>
+                </div>
+                <div class="email-body">
+                    <h3>Full Content</h3>
+                    <div id="modal-body"></div>
+                </div>
+                <div class="email-actions">
+                    <button class="btn-primary" id="btn-analyze-modal">🤖 Analyze with Agent</button>
+                    <button class="btn-secondary" id="btn-draft-reply-modal">✏️ Draft Reply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ DRAFT REPLY MODAL ============ -->
+    <div id="draft-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Draft Reply</h2>
+                <button class="btn-close-modal" id="btn-close-draft">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="draft-field">
+                    <label>To:</label>
+                    <input type="text" id="draft-to" readonly />
+                </div>
+                <div class="draft-field">
+                    <label>Subject:</label>
+                    <input type="text" id="draft-subject" />
+                </div>
+                <div class="draft-field">
+                    <label>Message:</label>
+                    <textarea id="draft-body" rows="8"></textarea>
+                </div>
+                <div class="draft-actions">
+                    <button class="btn-secondary" id="btn-cancel-draft">Cancel</button>
+                    <button class="btn-primary" id="btn-send-draft">Send Draft</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ SCRIPTS ============ -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app-pro.js"></script>
+</body>
+</html>

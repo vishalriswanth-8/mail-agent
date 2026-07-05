@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI-powered Gmail management dashboard — summarize, chat, and automate your email with local or cloud AI.">
+  <title>Mail Agent — AI Email Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="white" stroke-width="2" fill="none"/>
+            <path d="M2 7L12 12L22 7" stroke="white" stroke-width="2"/>
+            <path d="M12 12V22" stroke="white" stroke-width="2"/>
+          </svg>
+        </div>
+        <span class="logo-text">Mail Agent</span>
+      </div>
+    </div>
+
+    <!-- Model Toggle Row -->
+    <div class="model-toggle-row">
+      <span class="model-toggle-label">AI Model</span>
+      <div class="toggle-switch">
+        <span class="toggle-label-text" id="toggle-local-label">Local</span>
+        <div class="toggle-track" id="model-toggle-track" onclick="toggleModelProvider()" title="Switch between Local and Cloud AI">
+          <div class="toggle-thumb"></div>
+        </div>
+        <span class="toggle-label-text" id="toggle-cloud-label">Cloud</span>
+      </div>
+      <div class="toggle-status-dot checking" id="model-status-dot" title="Model connection status"></div>
+    </div>
+
+    <!-- Accounts Section -->
+    <div class="sidebar-section">
+      <div class="section-header">
+        <span class="section-title">Accounts</span>
+        <button class="btn-icon" id="btn-add-account" title="Add Gmail Account">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="account-list" id="account-list">
+        <div class="empty-state small" id="no-accounts" style="padding: 16px 8px;">
+          <p style="font-size:12px;color:var(--text-muted);">No accounts connected</p>
+          <button class="btn btn-primary btn-sm" id="btn-add-first" style="margin-top:8px;">+ Add Gmail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <button class="nav-item active" data-view="inbox" id="nav-inbox">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 12H16L14 15H10L8 12H2"/>
+          <path d="M5.45 5.11L2 12V18A2 2 0 0 0 4 20H20A2 2 0 0 0 22 18V12L18.55 5.11A2 2 0 0 0 16.76 4H7.24A2 2 0 0 0 5.45 5.11Z"/>
+        </svg>
+        <span>Inbox</span>
+        <span class="badge" id="badge-inbox">0</span>
+      </button>
+      <button class="nav-item" data-view="important" id="nav-important">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        <span>Important</span>
+        <span class="badge important" id="badge-important">0</span>
+      </button>
+      <button class="nav-item" data-view="critical" id="nav-critical">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span>Critical</span>
+        <span class="badge critical" id="badge-critical">0</span>
+      </button>
+      <button class="nav-item" data-view="categories" id="nav-categories">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+        </svg>
+        <span>Categories</span>
+      </button>
+      <button class="nav-item" data-view="scheduled" id="nav-scheduled">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>Scheduled</span>
+        <span class="badge" id="badge-scheduled">0</span>
+      </button>
+      <button class="nav-item" data-view="rules" id="nav-rules">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+        </svg>
+        <span>Auto-Rules</span>
+      </button>
+      <button class="nav-item" data-view="logs" id="nav-logs">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>Activity Log</span>
+      </button>
+      <button class="nav-item" id="nav-settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <!-- Compose Button -->
+    <div class="sidebar-footer">
+      <button class="btn-compose" id="btn-compose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        Compose Mail
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <main class="main-content" id="main-content">
+
+    <!-- Stats Bar -->
+    <header class="stats-bar" id="stats-bar">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-total">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-total-val">0</span>
+          <span class="stat-label">Total Emails</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-unread">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-unread-val">0</span>
+          <span class="stat-label">Unread</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-important">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-important-val">0</span>
+          <span class="stat-label">Important</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-critical">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-critical-val">0</span>
+          <span class="stat-label">Critical</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-accounts">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21V19A4 4 0 0 0 13 15H5A4 4 0 0 0 1 19V21"/>
+            <circle cx="9" cy="7" r="4"/><path d="M23 21V19A4 4 0 0 0 19 15.13"/>
+            <path d="M16 3.13A4 4 0 0 1 20 7A4 4 0 0 1 16 10.87"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-accounts-val">0</span>
+          <span class="stat-label">Accounts</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Toolbar -->
+    <div class="toolbar" id="toolbar">
+      <div class="toolbar-left">
+        <h1 class="view-title" id="view-title">Inbox</h1>
+        <span class="email-count" id="email-count"></span>
+      </div>
+      <div class="toolbar-right">
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" placeholder="Search emails..." id="search-input">
+        </div>
+        <select class="filter-select" id="filter-account">
+          <option value="">All Accounts</option>
+        </select>
+        <select class="filter-select" id="filter-category">
+          <option value="">All Categories</option>
+          <option value="work">Work</option>
+          <option value="personal">Personal</option>
+          <option value="finance">Finance</option>
+          <option value="newsletter">Newsletter</option>
+          <option value="social">Social</option>
+          <option value="promotion">Promotion</option>
+          <option value="security">Security</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn-sync" id="btn-sync" title="Sync Emails">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="sync-icon">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9A9 9 0 0 1 20.49 4.51L23 10"/>
+            <path d="M20.49 15A9 9 0 0 1 3.51 19.49L1 14"/>
+          </svg>
+          <span id="sync-btn-text">Sync</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sync Progress -->
+    <div id="sync-progress-bar-wrap" style="display:none;" class="sync-progress">
+      <div class="sync-progress-track">
+        <div class="sync-progress-bar" id="sync-bar"></div>
+      </div>
+      <span class="sync-message" id="sync-message">Syncing...</span>
+    </div>
+
+    <!-- ---- Inbox / Priority Views ---- -->
+    <div id="view-emails" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+      <!-- Focus Strip -->
+      <div class="focus-strip" id="focus-strip" style="padding: 8px 16px 0;">
+        <div class="focus-chip active" data-filter="" id="chip-all">All</div>
+        <div class="focus-chip" data-filter="unread" id="chip-unread">Unread</div>
+        <div class="focus-chip" data-filter-cat="work">Work</div>
+        <div class="focus-chip" data-filter-cat="personal">Personal</div>
+        <div class="focus-chip" data-filter-cat="finance">Finance</div>
+        <div class="focus-chip" data-filter-cat="security">Security</div>
+        <div class="focus-chip" data-filter-cat="social">Social</div>
+      </div>
+
+      <div class="email-list-container" id="email-list-container">
+        <div class="email-list" id="email-list"></div>
+        <div class="empty-state" id="empty-state" style="display:none;">
+          <div class="empty-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
+          </div>
+          <h3>No emails found</h3>
+          <p>Add an account and sync to get started</p>
+        </div>
+        <div id="loading-skeleton" style="display:none;">
+          <div class="skeleton-item" style="--delay:0"></div>
+          <div class="skeleton-item" style="--delay:1"></div>
+          <div class="skeleton-item" style="--delay:2"></div>
+          <div class="skeleton-item" style="--delay:3"></div>
+          <div class="skeleton-item" style="--delay:4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- Categories View ---- -->
+    <div id="view-categories" style="display:none;flex:1;overflow:hidden;">
+      <div class="categories-view">
+        <div class="category-grid" id="category-grid"></div>
+      </div>
+    </div>
+
+    <!-- ---- Scheduled View ---- -->
+    <div id="view-scheduled" style="display:none;flex:1;overflow:auto;padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="font-size:15px;font-weight:700;color:var(--text-primary);">Scheduled Emails</h2>
+        <button class="btn btn-sm btn-secondary" id="btn-refresh-scheduled">Refresh</button>
+      </div>
+      <div class="scheduled-list" id="scheduled-list">
+        <p class="text-muted" style="font-size:13px;">No scheduled emails.</p>
+      </div>
+    </div>
+
+    <!-- ---- Rules View ---- -->
+    <div id="view-rules" style="display:none;flex:1;overflow:auto;padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="font-size:15px;font-weight:700;color:var(--text-primary);">Auto-Reply Rules</h2>
+        <button class="btn btn-sm btn-primary" id="btn-add-rule">+ Add Rule</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">When a matching email is received, the agent automatically sends a reply based on your template.</p>
+      <div class="rules-list" id="rules-list">
+        <p class="text-muted" style="font-size:13px;">No rules defined.</p>
+      </div>
+    </div>
+
+    <!-- ---- Logs View ---- -->
+    <div id="view-logs" style="display:none;flex:1;overflow:auto;padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="font-size:15px;font-weight:700;color:var(--text-primary);">Activity Log</h2>
+        <button class="btn btn-sm btn-secondary" id="btn-refresh-logs">Refresh</button>
+      </div>
+      <div class="log-list" id="log-list">
+        <p class="text-muted" style="font-size:13px;">No activity yet.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============ EMAIL DETAIL PANEL ============ -->
+<div class="detail-overlay" id="detail-overlay"></div>
+<aside class="detail-panel" id="detail-panel">
+  <div class="detail-header">
+    <button class="btn-icon" id="btn-close-detail" title="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <div class="detail-header-actions" id="detail-header-actions">
+      <!-- priority/category tags, important button rendered here -->
+    </div>
+  </div>
+  <div class="detail-content" id="detail-content">
+    <!-- Loaded dynamically -->
+  </div>
+</aside>
+
+<!-- ============ FLOATING CHAT BOT ============ -->
+<div class="chat-fab" id="chat-fab">
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-panel-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span class="chat-title">Mail Chat</span>
+      <select class="chat-scope-select" id="chat-scope">
+        <option value="all">All Mail</option>
+        <option value="account">This Account</option>
+        <option value="thread">This Thread</option>
+      </select>
+      <button class="btn-icon" id="btn-close-chat-panel" title="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg bot">
+        <div class="chat-bubble">👋 Hi! I'm your mail assistant. Ask me anything about your emails — like "which emails need replies?" or "summarize my work emails".</div>
+        <span class="chat-time">Now</span>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <button class="btn-icon" id="btn-search-contact-chat" title="Search Contacts" style="margin-right: 4px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <textarea class="chat-input" id="chat-input" placeholder="Ask about your mail..." rows="1"></textarea>
+      <button class="btn btn-primary btn-sm" id="btn-chat-send" title="Send">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <button class="chat-fab-btn" id="chat-fab-btn" title="Chat with your mail">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span class="chat-unread-badge" id="chat-unread-badge"></span>
+  </button>
+</div>
+
+<!-- ============ COMPOSE MODAL ============ -->
+<div class="modal-overlay" id="compose-overlay"></div>
+<div class="modal wide" id="compose-modal">
+  <div class="modal-header">
+    <h2>Compose Email</h2>
+    <button class="btn-icon" id="btn-close-compose">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <!-- AI Compose Quick Input -->
+    <div class="ai-compose-area" id="ai-compose-area">
+      <div class="ai-compose-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        AI Compose — describe what you want to send
+      </div>
+      <textarea id="ai-instruction" rows="2" placeholder='e.g. "Send birthday wish to my girlfriend at xyz@gmail.com at 12am tomorrow"' style="width:100%;background:none;border:none;color:var(--text-primary);font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.6;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-primary btn-sm" id="btn-ai-compose">✨ Generate Email</button>
+        <span style="font-size:11px;color:var(--text-muted);align-self:center;">AI will compose and optionally schedule</span>
+      </div>
+    </div>
+
+    <form id="compose-form">
+      <div class="form-group">
+        <label>From</label>
+        <select id="compose-from" required></select>
+      </div>
+      <div class="form-group">
+        <label>To</label>
+        <input type="email" id="compose-to" placeholder="recipient@gmail.com" required>
+      </div>
+      <div class="form-group">
+        <label>Subject</label>
+        <input type="text" id="compose-subject" placeholder="Email subject">
+      </div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea id="compose-body" rows="8" placeholder="Write your message here..."></textarea>
+      </div>
+      <div class="schedule-row" id="schedule-row" style="display:none;">
+        <label>📅 Schedule send:</label>
+        <input type="datetime-local" id="compose-schedule-at" style="flex:1;">
+        <button type="button" class="btn btn-ghost btn-xs" id="btn-clear-schedule">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:12px;">
+        <button type="button" class="btn btn-ghost btn-xs" id="btn-toggle-schedule">🕒 Schedule Send</button>
+        <button type="button" class="btn btn-ghost btn-xs" id="btn-ai-rewrite">✨ Make Professional</button>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-compose">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btn-send">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          Send
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-overlay" id="settings-overlay"></div>
+<div class="modal" id="settings-modal">
+  <div class="modal-header">
+    <h3>Settings</h3>
+    <button class="btn-icon" id="btn-close-settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <!-- Model Status -->
+    <div class="settings-section">
+      <div class="settings-section-header"><h4>AI Model Status</h4></div>
+      <div class="model-status-card" id="model-status-card">
+        <div class="model-status-indicator offline" id="model-status-indicator"></div>
+        <div class="model-status-info">
+          <div class="model-status-name" id="model-status-name">Loading...</div>
+          <div class="model-status-msg" id="model-status-msg"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider Toggle -->
+    <div class="settings-section">
+      <div class="settings-section-header"><h4>AI Provider</h4></div>
+      <div class="provider-toggle-row">
+        <div>
+          <div class="provider-toggle-label" id="provider-label-text">🖥️ Local (LM Studio)</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;" id="provider-sublabel">Running on your computer</div>
+        </div>
+        <div class="big-toggle-track" id="settings-toggle-track" onclick="settingsToggleProvider()">
+          <div class="big-toggle-thumb" id="settings-toggle-thumb"></div>
+        </div>
+      </div>
+
+      <!-- Local Fields -->
+      <div id="local-fields">
+        <div class="form-group">
+          <label>LM Studio URL</label>
+          <input type="url" id="local-base-url" placeholder="http://localhost:1234/v1">
+        </div>
+        <div class="form-group">
+          <label>Local Model Name</label>
+          <input type="text" id="local-model" placeholder="Leave blank to auto-detect">
+        </div>
+      </div>
+
+      <!-- Cloud Fields -->
+      <div id="cloud-fields" style="display:none;">
+        <div class="form-group">
+          <label>Gemini Model</label>
+          <input type="text" id="cloud-model" placeholder="gemini-3.5-flash">
+        </div>
+      </div>
+
+      <div class="test-btn-row">
+        <button class="btn btn-secondary btn-sm" id="btn-test-local" onclick="testLocal()">🖥️ Test Local</button>
+        <button class="btn btn-secondary btn-sm" id="btn-test-cloud" onclick="testCloud()">☁️ Test Cloud</button>
+      </div>
+      <div class="test-result" id="test-local-result"></div>
+      <div class="test-result" id="test-cloud-result"></div>
+
+      <div class="form-group checkbox-group" style="margin-top:10px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="force-provider">
+          <span><strong>Force selected provider</strong> (no fallback)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Auto Sync -->
+    <div class="settings-section">
+      <div class="settings-section-header"><h4>Auto Sync</h4></div>
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-sync-toggle">
+          <span><strong>Enable Auto-Sync</strong></span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Sync Interval (seconds)</label>
+        <input type="number" id="auto-sync-interval" min="10" max="3600" value="10" step="10">
+      </div>
+    </div>
+
+    <!-- Persona -->
+    <div class="settings-section">
+      <div class="settings-section-header"><h4>Your Persona</h4></div>
+      <div class="form-group">
+        <label>Tell AI about you</label>
+        <textarea id="persona-body" rows="5" placeholder="e.g. My name is Riswanth. I work in software. Sign off with 'Best, Riswanth'. Be friendly."></textarea>
+        <p class="form-help">This helps AI write emails in your voice.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-settings">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD RULE MODAL ============ -->
+<div class="modal-overlay" id="rule-overlay"></div>
+<div class="modal" id="rule-modal">
+  <div class="modal-header">
+    <h3 id="rule-modal-title">New Auto-Reply Rule</h3>
+    <button class="btn-icon" id="btn-close-rule">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="rule-edit-id">
+    <div class="form-group">
+      <label>Rule Name</label>
+      <input type="text" id="rule-name" placeholder='e.g. "Location Reply"'>
+    </div>
+    <div class="form-group">
+      <label>Trigger Keywords (comma separated)</label>
+      <input type="text" id="rule-keywords" placeholder='e.g. "where are you, location, address"'>
+      <p class="form-help">If any of these phrases appear in a received email, this rule activates.</p>
+    </div>
+    <div class="form-group">
+      <label>Auto-Reply Template</label>
+      <textarea id="rule-template" rows="4" placeholder='e.g. "Hi! I am currently at home. You can visit between 6am and 12pm."'></textarea>
+      <p class="form-help">This message will be sent as a reply when the rule triggers.</p>
+    </div>
+    <div class="form-group">
+      <label>Time Condition (optional)</label>
+      <input type="text" id="rule-time" placeholder='e.g. "only between 6-12 am" or leave blank'>
+      <p class="form-help">The AI will consider this condition when composing the reply.</p>
+    </div>
+    <div class="form-group">
+      <label>Apply To Account (optional)</label>
+      <select id="rule-account">
+        <option value="">All Accounts</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="btn-cancel-rule">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-save-rule">Save Rule</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SEARCH CONTACT MODAL ============ -->
+<div class="modal-overlay" id="search-contact-overlay"></div>
+<div class="modal" id="search-contact-modal">
+  <div class="modal-header">
+    <h3>Search Contacts</h3>
+    <button class="btn-icon" id="btn-close-search-contact">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <div class="form-group">
+      <div class="search-box" style="width:100%;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="contact-search-input" placeholder="Type a name to search..." style="width:100%;">
+      </div>
+    </div>
+    <div id="contact-search-results" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;margin-top:12px;">
+      <p class="text-muted" style="font-size:12px;">Start typing to search contacts.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Scripts -->
+<script src="/static/js/api.js"></script>
+<script src="/static/js/components.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
