@@ -21,6 +21,26 @@ from agent.autonomous_agent import AutonomousAgent
 app = Flask(__name__)
 app.secret_key = config.FLASK_SECRET_KEY
 
+# --- Enable CORS globally for local API access ---
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        headers = response.headers
+        headers["Access-Control-Allow-Origin"] = "*"
+        headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        return response
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
+
 auth_manager = AuthManager()
 gmail_client = GmailClient(auth_manager)
 ai_engine = AIEngine()
