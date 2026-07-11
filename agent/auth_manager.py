@@ -110,7 +110,14 @@ class AuthManager:
         client_config = self._load_client_config()
 
         flow = InstalledAppFlow.from_client_config(client_config, self.scopes)
-        creds = flow.run_local_server(port=OAUTH_PORT)
+        try:
+            creds = flow.run_local_server(port=OAUTH_PORT)
+        except OSError as e:
+            if e.errno == 10048 or "10048" in str(e):
+                print(f"[AuthManager] Port {OAUTH_PORT} is in use ({e}). Falling back to an auto-selected free port.")
+                creds = flow.run_local_server(port=0)
+            else:
+                raise
 
         # Build a temporary Gmail service to get the email address
         from googleapiclient.discovery import build

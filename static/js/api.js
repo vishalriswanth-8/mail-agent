@@ -176,6 +176,14 @@ const API = {
     });
     return r.json();
   },
+  async sendChatMessage(message, emailId, scope, sessionId) {
+    const r = await apiFetch('/api/chat/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, email_id: emailId, scope, session_id: sessionId })
+    });
+    return r.json();
+  },
   async getChatHistory(session_id, limit = 50) {
     const r = await apiFetch(`/api/chat/history?session_id=${encodeURIComponent(session_id)}&limit=${limit}`);
     return r.json();
