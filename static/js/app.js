@@ -20,12 +20,12 @@ function getOrCreateChatSession() {
   const stored = localStorage.getItem('mailAgentChatSession');
   const timestamp = localStorage.getItem('mailAgentChatTimestamp');
   const now = Date.now();
-  
+
   // Keep session for 24 hours
   if (stored && timestamp && (now - parseInt(timestamp)) < 86400000) {
     return stored;
   }
-  
+
   const newSession = generateUUID();
   localStorage.setItem('mailAgentChatSession', newSession);
   localStorage.setItem('mailAgentChatTimestamp', now.toString());
@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   await refreshModelStatus();
   await loadChatHistory();
+  await loadChatSessions();
   startSyncPoller();
 });
 
@@ -117,6 +118,7 @@ function bindEvents() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
   });
   document.getElementById('chat-input')?.addEventListener('input', autoResizeTextarea);
+  document.getElementById('btn-new-chat')?.addEventListener('click', startNewChat);
 
   // Compose Modal
   document.getElementById('btn-compose')?.addEventListener('click', openCompose);
@@ -172,6 +174,12 @@ async function loadAccounts() {
     updateAccountDropdowns();
     document.getElementById('stat-accounts-val').textContent = state.accounts.length;
     document.getElementById('no-accounts').style.display = state.accounts.length ? 'none' : 'block';
+
+    if (state.accounts.length === 0) {
+      openModal('dev-access-overlay', 'dev-access-modal');
+    } else {
+      closeModal('dev-access-overlay', 'dev-access-modal');
+    }
   } catch (e) {
     console.error('loadAccounts error:', e);
   }
@@ -262,7 +270,7 @@ async function loadStats() {
     document.getElementById('badge-inbox').textContent = stats.unread || 0;
     document.getElementById('badge-important').textContent = stats.important || 0;
     document.getElementById('badge-critical').textContent = stats.priorities?.critical || 0;
-  } catch {}
+  } catch { }
 }
 
 // ─── Email List ────────────────────────────────────────────
@@ -360,7 +368,7 @@ async function loadCategories() {
       .map(([cat, count]) => renderCategoryCard(cat, count))
       .join('');
     if (!grid.innerHTML) grid.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No categories yet.</p>';
-  } catch {}
+  } catch { }
 }
 
 async function loadScheduled() {
@@ -375,7 +383,7 @@ async function loadScheduled() {
     list.innerHTML = items.length
       ? items.map(renderScheduledItem).join('')
       : '<p style="color:var(--text-muted);font-size:13px;">No scheduled emails.</p>';
-  } catch {}
+  } catch { }
 }
 
 async function loadRules() {
@@ -387,7 +395,7 @@ async function loadRules() {
     list.innerHTML = rules.length
       ? rules.map(renderRuleItem).join('')
       : '<p style="color:var(--text-muted);font-size:13px;">No rules defined. Click "+ Add Rule" to create one.</p>';
-  } catch {}
+  } catch { }
 }
 
 async function loadLogs() {
@@ -399,7 +407,7 @@ async function loadLogs() {
     list.innerHTML = logs.length
       ? logs.map(renderLogEntry).join('')
       : '<p style="color:var(--text-muted);font-size:13px;">No activity logged yet.</p>';
-  } catch {}
+  } catch { }
 }
 
 function filterByCategory(category) {
@@ -493,7 +501,7 @@ function startSyncPoller() {
           showToast('Sync complete!', 'success');
         }
       }
-    } catch {}
+    } catch { }
   }, 2000);
 }
 
@@ -502,6 +510,140 @@ function toggleChat() {
   state.chatOpen = !state.chatOpen;
   const panel = document.getElementById('chat-panel');
   if (panel) panel.classList.toggle('open', state.chatOpen);
+  if (state.chatOpen) {
+    loadChatSessions();
+  }
+}
+
+// ─── Markdown renderer for chat messages ─────────────────
+function renderMarkdown(text) {
+  if (!text) return '';
+  // Escape HTML first (but preserve emojis)
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Bold: **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // Process line by line for bullets and numbering
+  const lines = html.split('\n');
+  const result = [];
+  let inList = false;
+  let listType = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const bulletMatch = line.match(/^\s*[-*•]\s+(.+)/);
+    const numberedMatch = line.match(/^\s*(\d+)\.\s+(.+)/);
+
+    if (bulletMatch) {
+      if (!inList || listType !== 'ul') {
+        if (inList) result.push(listType === 'ul' ? '</ul>' : '</ol>');
+        result.push('<ul class="chat-list">');
+        inList = true; listType = 'ul';
+      }
+      result.push(`<li>${bulletMatch[1]}</li>`);
+    } else if (numberedMatch) {
+      if (!inList || listType !== 'ol') {
+        if (inList) result.push(listType === 'ul' ? '</ul>' : '</ol>');
+        result.push('<ol class="chat-list">');
+        inList = true; listType = 'ol';
+      }
+      result.push(`<li>${numberedMatch[2]}</li>`);
+    } else {
+      if (inList) {
+        result.push(listType === 'ul' ? '</ul>' : '</ol>');
+        inList = false; listType = null;
+      }
+      if (line.trim() === '') {
+        result.push('<br>');
+      } else {
+        result.push(line + '<br>');
+      }
+    }
+  }
+  if (inList) result.push(listType === 'ul' ? '</ul>' : '</ol>');
+
+  // Clean up duplicate <br> at end
+  return result.join('').replace(/(<br>){3,}/g, '<br><br>').replace(/<br>$/, '');
+}
+
+// ─── Load session list in sidebar ─────────────────────────
+async function loadChatSessions() {
+  try {
+    const data = await API.getChatSessions();
+    const sessions = data.sessions || [];
+    const listEl = document.getElementById('chat-session-list');
+    if (!listEl) return;
+
+    if (sessions.length === 0) {
+      listEl.innerHTML = '<p class="chat-sessions-empty">💬 No past chats yet</p>';
+      return;
+    }
+
+    listEl.innerHTML = sessions.map(s => {
+      const isActive = s.session_id === state.chatSessionId;
+      const timeAgo = formatChatTime(s.last_message_at);
+      return `
+        <div class="chat-session-item${isActive ? ' active' : ''}" onclick="selectChatSession('${escAttr(s.session_id)}')" title="${escAttr(s.title)}">
+          <div class="session-icon">💬</div>
+          <div class="session-info">
+            <div class="session-title">${escHtml(s.title)}</div>
+            <div class="session-time">${timeAgo}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load chat sessions', e);
+  }
+}
+
+function formatChatTime(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    if (diff < 604800000) return d.toLocaleDateString('en', { weekday: 'short' });
+    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  } catch { return ''; }
+}
+
+// ─── Start a new chat session ─────────────────────────────
+function startNewChat() {
+  const newId = generateUUID();
+  state.chatSessionId = newId;
+  localStorage.setItem('mailAgentChatSession', newId);
+  localStorage.setItem('mailAgentChatTimestamp', Date.now().toString());
+
+  const container = document.getElementById('chat-messages');
+  if (container) {
+    container.innerHTML = '';
+    appendChatMessage('bot', '✨ New chat started! How can I help you with your emails today?\n\n- 📬 Ask me to summarize emails\n- 🔍 Search for emails by topic\n- ✍️ Help you compose or reply');
+  }
+
+  // Deselect active session in sidebar
+  document.querySelectorAll('.chat-session-item').forEach(el => el.classList.remove('active'));
+}
+
+// ─── Select a past chat session ───────────────────────────
+async function selectChatSession(sessionId) {
+  state.chatSessionId = sessionId;
+  localStorage.setItem('mailAgentChatSession', sessionId);
+  localStorage.setItem('mailAgentChatTimestamp', Date.now().toString());
+
+  // Update sidebar active state
+  document.querySelectorAll('.chat-session-item').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('onclick')?.includes(sessionId));
+  });
+
+  await loadChatHistory();
 }
 
 async function loadChatHistory() {
@@ -510,12 +652,18 @@ async function loadChatHistory() {
     const history = data.history || [];
     const container = document.getElementById('chat-messages');
     if (!container) return;
-    
+
     // Clear existing
     container.innerHTML = '';
-    
+
+    if (history.length === 0) {
+      // Show welcome message
+      appendChatMessage('bot', '👋 Hi! I\'m your **Mail Assistant**. Ask me anything about your emails!\n\n💡 Try asking:\n- "Summarize my unread emails"\n- "What emails need replies?"\n- "Show me work emails"');
+      return;
+    }
+
     // Render from oldest to newest
-    [...history].reverse().forEach(msg => {
+    [...history].forEach(msg => {
       appendChatMessage('user', msg.user_message, false);
       appendChatMessage('bot', msg.agent_response, false);
     });
@@ -527,10 +675,10 @@ async function loadChatHistory() {
 
 async function sendChatMessage(action = null) {
   const input = document.getElementById('chat-input');
-  const message = action || (input.value || '').trim();
+  const message = action || (input ? (input.value || '').trim() : '');
   if (!message) return;
 
-  if (!action) {
+  if (!action && input) {
     input.value = '';
     input.style.height = 'auto';
   }
@@ -542,9 +690,13 @@ async function sendChatMessage(action = null) {
   if (!message.startsWith('/')) {
     appendChatMessage('user', message);
   } else if (message.startsWith('/summarize_contact ')) {
-    appendChatMessage('user', `Summarize emails from ${message.replace('/summarize_contact ', '')}`);
+    appendChatMessage('user', `📋 Summarize emails from ${message.replace('/summarize_contact ', '')}`);
+  } else if (message.startsWith('/info_email ')) {
+    const parts = message.replace('/info_email ', '').split('|');
+    const emailTitle = parts[1] || `Email #${parts[0]}`;
+    appendChatMessage('user', `📧 Get details about: "${emailTitle}"`);
   }
-  
+
   showChatTyping();
 
   const scope = document.getElementById('chat-scope')?.value || 'all';
@@ -553,16 +705,22 @@ async function sendChatMessage(action = null) {
   try {
     const result = await API.chat(message, scope, account, state.chatSessionId);
     hideChatTyping();
-    if (result.success) {
-      appendChatMessage('bot', result.reply, true, result.options);
+    if (result && result.success) {
+      appendChatMessage('bot', result.reply, true, result.options, result.email_links);
+      // Refresh session list after each message
+      await loadChatSessions();
     } else {
-      appendChatMessage('bot', `Sorry, I couldn't process that: ${result.error || 'unknown error'}`);
+      const errMsg = result?.error || 'unknown error';
+      console.error('[Chat] API error:', errMsg);
+      appendChatMessage('bot', `❌ Sorry, I couldn't process that: ${errMsg}`);
     }
-  } catch {
+  } catch (err) {
     hideChatTyping();
-    appendChatMessage('bot', 'Connection error. Please try again.');
+    console.error('[Chat] Network error:', err);
+    appendChatMessage('bot', '⚠️ Connection error. Please check the server is running and try again.');
   }
 }
+
 
 function handleChatOptionClick(action) {
   // Remove options from the UI once clicked to prevent double clicks
@@ -570,27 +728,51 @@ function handleChatOptionClick(action) {
   sendChatMessage(action);
 }
 
-function appendChatMessage(role, text, animate = true, options = null) {
+function appendChatMessage(role, text, animate = true, options = null, emailLinks = null) {
   const container = document.getElementById('chat-messages');
   if (!container) return;
   const msgEl = document.createElement('div');
   msgEl.className = `chat-msg ${role}`;
-  
+
+  // Avatar
+  const avatarEmoji = role === 'bot' ? '🤖' : '👤';
+
+  // Render message content
+  const renderedText = renderMarkdown(text);
+
+  // Build options HTML
   let optionsHtml = '';
   if (options && options.length > 0) {
     optionsHtml = `
-      <div class="chat-options-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
-        ${options.map(opt => `<button class="btn btn-secondary btn-sm" onclick="handleChatOptionClick('${escAttr(opt.action)}')">${escHtml(opt.label)}</button>`).join('')}
+      <div class="chat-options-container">
+        ${options.map(opt => `<button class="chat-option-btn" onclick="handleChatOptionClick('${escAttr(opt.action)}')">📧 ${escHtml(opt.label)}</button>`).join('')}
       </div>
     `;
   }
-  
+
+  // Build email link buttons
+  let emailLinksHtml = '';
+  if (emailLinks && emailLinks.length > 0) {
+    emailLinksHtml = emailLinks.map(link => `
+      <button class="chat-open-email-btn" onclick="openEmailDetail(${link.id}); return false;">
+        📬 Open Email: <em>${escHtml(link.subject || 'View Email')}</em>
+      </button>
+    `).join('');
+  }
+
+  // Format time
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+
   msgEl.innerHTML = `
-    <div class="chat-bubble">${escHtml(text).replace(/\\n/g, '<br/>')}
-      ${optionsHtml}
+    <div class="chat-avatar ${role}-avatar">${avatarEmoji}</div>
+    <div class="chat-bubble-wrap">
+      <div class="chat-bubble">${renderedText}${optionsHtml}${emailLinksHtml}</div>
+      <span class="chat-time">${timeStr}</span>
     </div>
-    <span class="chat-time">just now</span>
   `;
+
+  if (animate) msgEl.classList.add('msg-animate');
   container.appendChild(msgEl);
   container.scrollTop = container.scrollHeight;
 }
@@ -599,9 +781,16 @@ function showChatTyping() {
   const container = document.getElementById('chat-messages');
   if (!container) return;
   const typing = document.createElement('div');
-  typing.className = 'chat-typing';
+  typing.className = 'chat-msg bot';
   typing.id = 'chat-typing-indicator';
-  typing.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  typing.innerHTML = `
+    <div class="chat-avatar bot-avatar">🤖</div>
+    <div class="chat-bubble-wrap">
+      <div class="chat-bubble typing-bubble">
+        <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+      </div>
+    </div>
+  `;
   container.appendChild(typing);
   container.scrollTop = container.scrollHeight;
 }
@@ -614,6 +803,7 @@ function autoResizeTextarea(e) {
   e.target.style.height = 'auto';
   e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
 }
+
 
 // ─── Compose ───────────────────────────────────────────────
 function openCompose() {
@@ -951,7 +1141,7 @@ async function toggleModelProvider() {
 
   try {
     await API.saveSettings({ ai_provider: state.isCloudMode ? 'cloud' : 'local' });
-    showToast(`Switched to ${state.isCloudMode ? '☁️ Cloud (Gemini)' : '🖥️ Local (LM Studio)'}`, 'info');
+    showToast(`Switched to ${state.isCloudMode ? '☁️ Cloud (Nvidia NIM)' : '🖥️ Local (LM Studio)'}`, 'info');
     await refreshModelStatus();
   } catch {
     showToast('Error switching provider', 'error');
@@ -973,8 +1163,8 @@ function updateModelToggleUI() {
   if (localLabel) localLabel.classList.toggle('active', !state.isCloudMode);
   if (cloudLabel) cloudLabel.classList.toggle('active', state.isCloudMode);
 
-  if (providerLabelText) providerLabelText.textContent = state.isCloudMode ? '☁️ Cloud (Gemini)' : '🖥️ Local (LM Studio)';
-  if (providerSublabel) providerSublabel.textContent = state.isCloudMode ? 'Using Google Gemini API' : 'Running on your computer';
+  if (providerLabelText) providerLabelText.textContent = state.isCloudMode ? '☁️ Cloud (Nvidia NIM)' : '🖥️ Local (LM Studio)';
+  if (providerSublabel) providerSublabel.textContent = state.isCloudMode ? 'Using Nvidia NIM API' : 'Running on your computer';
   if (localFields) localFields.style.display = state.isCloudMode ? 'none' : 'block';
   if (cloudFields) cloudFields.style.display = state.isCloudMode ? 'block' : 'none';
 }
@@ -1018,13 +1208,32 @@ async function testLocal() {
     const model = document.getElementById('local-model')?.value || '';
     const data = await API.testLocalModel(url, model);
     if (result) {
+      result.style.display = 'block';
       result.className = `test-result ${data.success ? 'success' : 'error'}`;
-      result.textContent = data.success
-        ? `✓ Connected! Model: ${data.model || 'auto'}`
-        : `✕ ${data.error || 'Connection failed'}`;
+      if (data.success) {
+        result.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 6px; font-size: 14px;">📋 Test Report: Success</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Status | <strong>Value:</strong> ✅ Connected</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Model | <strong>Value:</strong> <code>${data.model || 'auto-detect'}</code></div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Endpoint | <strong>Value:</strong> <code style="font-size: 11px; word-break: break-all;">${data.endpoint}</code></div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Latency | <strong>Value:</strong> ${data.latency_sec} seconds</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Preview | <strong>Value:</strong> <em style="background: rgba(255,255,255,0.06); padding: 2px 4px; border-radius: 4px;">"${data.response_preview}"</em></div>
+        `;
+      } else {
+        result.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 6px; font-size: 14px;">📋 Test Report: Failed</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Model | <strong>Value:</strong> <code>${data.model || 'Unknown'}</code></div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Endpoint | <strong>Value:</strong> <code style="font-size: 11px; word-break: break-all;">${data.endpoint || 'Unknown'}</code></div>
+          <div style="color: #ff4a4a; margin-top: 6px;"><strong>Error:</strong> ${data.error || 'Connection failed'}</div>
+        `;
+      }
     }
   } catch (e) {
-    if (result) { result.className = 'test-result error'; result.textContent = `✕ Error: ${e.message}`; }
+    if (result) {
+      result.style.display = 'block';
+      result.className = 'test-result error';
+      result.textContent = `✕ Error: ${e.message}`;
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🖥️ Test Local'; }
   }
@@ -1040,13 +1249,34 @@ async function testCloud() {
     const model = document.getElementById('cloud-model')?.value || '';
     const data = await API.testCloudModel(model);
     if (result) {
+      result.style.display = 'block';
       result.className = `test-result ${data.success ? 'success' : 'error'}`;
-      result.textContent = data.success
-        ? `✓ Connected! Model: ${data.model || 'Gemini'}`
-        : `✕ ${data.error || 'Connection failed'}`;
+      if (data.success) {
+        result.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 6px; font-size: 14px;">📋 Test Report: Success</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Status | <strong>Value:</strong> ✅ Connected</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Model | <strong>Value:</strong> <code>${data.model}</code></div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Endpoint | <strong>Value:</strong> <code style="font-size: 11px; word-break: break-all;">${data.endpoint}</code></div>
+          ${data.api_key_obscured ? `<div style="margin-bottom: 4px;"><strong>Metric:</strong> API Key | <strong>Value:</strong> <code>${data.api_key_obscured}</code></div>` : ''}
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Latency | <strong>Value:</strong> ${data.latency_sec} seconds</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Preview | <strong>Value:</strong> <em style="background: rgba(255,255,255,0.06); padding: 2px 4px; border-radius: 4px;">"${data.response_preview}"</em></div>
+        `;
+      } else {
+        result.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 6px; font-size: 14px;">📋 Test Report: Failed</div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Model | <strong>Value:</strong> <code>${data.model || 'Unknown'}</code></div>
+          <div style="margin-bottom: 4px;"><strong>Metric:</strong> Endpoint | <strong>Value:</strong> <code style="font-size: 11px; word-break: break-all;">${data.endpoint || 'Unknown'}</code></div>
+          ${data.api_key_obscured ? `<div style="margin-bottom: 4px;"><strong>Metric:</strong> API Key | <strong>Value:</strong> <code>${data.api_key_obscured}</code></div>` : ''}
+          <div style="color: #ff4a4a; margin-top: 6px;"><strong>Error:</strong> ${data.error || 'Connection failed'}</div>
+        `;
+      }
     }
   } catch (e) {
-    if (result) { result.className = 'test-result error'; result.textContent = `✕ Error: ${e.message}`; }
+    if (result) {
+      result.style.display = 'block';
+      result.className = 'test-result error';
+      result.textContent = `✕ Error: ${e.message}`;
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '☁️ Test Cloud'; }
   }

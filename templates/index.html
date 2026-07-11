@@ -347,41 +347,68 @@
 <!-- ============ FLOATING CHAT BOT ============ -->
 <div class="chat-fab" id="chat-fab">
   <div class="chat-panel" id="chat-panel">
-    <div class="chat-panel-header">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-      <span class="chat-title">Mail Chat</span>
-      <select class="chat-scope-select" id="chat-scope">
-        <option value="all">All Mail</option>
-        <option value="account">This Account</option>
-        <option value="thread">This Thread</option>
-      </select>
-      <button class="btn-icon" id="btn-close-chat-panel" title="Close">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+
+    <!-- Left: Chat Sessions Sidebar -->
+    <div class="chat-sessions-sidebar" id="chat-sessions-sidebar">
+      <button class="btn-new-chat" id="btn-new-chat" title="Start a new chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chat
       </button>
-    </div>
-    <div class="chat-messages" id="chat-messages">
-      <div class="chat-msg bot">
-        <div class="chat-bubble">👋 Hi! I'm your mail assistant. Ask me anything about your emails — like "which emails need replies?" or "summarize my work emails".</div>
-        <span class="chat-time">Now</span>
+      <div class="chat-session-list" id="chat-session-list">
+        <!-- Sessions rendered by JS -->
+        <p class="chat-sessions-empty">No past chats yet</p>
       </div>
     </div>
-    <div class="chat-input-area">
-      <button class="btn-icon" id="btn-search-contact-chat" title="Search Contacts" style="margin-right: 4px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-      </button>
-      <textarea class="chat-input" id="chat-input" placeholder="Ask about your mail..." rows="1"></textarea>
-      <button class="btn btn-primary btn-sm" id="btn-chat-send" title="Send">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
+
+    <!-- Right: Active Chat Area -->
+    <div class="chat-main">
+      <div class="chat-panel-header">
+        <div class="chat-header-left">
+          <span class="chat-title-emoji">🤖</span>
+          <span class="chat-title">Mail Assistant</span>
+        </div>
+        <div class="chat-header-right">
+          <select class="chat-scope-select" id="chat-scope">
+            <option value="all">📬 All Mail</option>
+            <option value="account">📧 This Account</option>
+            <option value="thread">🧵 This Thread</option>
+          </select>
+          <button class="btn-icon" id="btn-close-chat-panel" title="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg bot">
+          <div class="chat-avatar bot-avatar">🤖</div>
+          <div class="chat-bubble-wrap">
+            <div class="chat-bubble">👋 Hi! I'm your <strong>Mail Assistant</strong>. Ask me anything about your emails!<br><br>
+              💡 Try asking:<br>
+              - "Summarize my unread emails"<br>
+              - "What emails need replies?"<br>
+              - "Show me work emails"
+            </div>
+            <span class="chat-time">Now</span>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <button class="btn-icon" id="btn-search-contact-chat" title="Search Contacts" style="margin-right: 4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
+        <textarea class="chat-input" id="chat-input" placeholder="Ask about your mail..." rows="1"></textarea>
+        <button class="btn btn-primary btn-sm" id="btn-chat-send" title="Send">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
     </div>
+
   </div>
   <button class="chat-fab-btn" id="chat-fab-btn" title="Chat with your mail">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
@@ -390,6 +417,7 @@
     <span class="chat-unread-badge" id="chat-unread-badge"></span>
   </button>
 </div>
+
 
 <!-- ============ COMPOSE MODAL ============ -->
 <div class="modal-overlay" id="compose-overlay"></div>
@@ -509,8 +537,8 @@
       <!-- Cloud Fields -->
       <div id="cloud-fields" style="display:none;">
         <div class="form-group">
-          <label>Gemini Model</label>
-          <input type="text" id="cloud-model" placeholder="gemini-3.5-flash">
+          <label>NIM Model</label>
+          <input type="text" id="cloud-model" placeholder="meta/llama-3.1-8b-instruct">
         </div>
       </div>
 
@@ -628,6 +656,28 @@
     </div>
     <div id="contact-search-results" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;margin-top:12px;">
       <p class="text-muted" style="font-size:12px;">Start typing to search contacts.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEVELOPMENT ACCESS MODAL ============ -->
+<div class="modal-overlay" id="dev-access-overlay" style="z-index: 10000;"></div>
+<div class="modal" id="dev-access-modal" style="z-index: 10001; max-width: 450px;">
+  <div class="modal-header">
+    <h3 style="color: var(--accent-primary); display: flex; align-items: center; gap: 8px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Development Access Required
+    </h3>
+  </div>
+  <div class="modal-body" style="padding-top: 10px;">
+    <p style="font-size: 14px; line-height: 1.6; margin-bottom: 20px; color: var(--text-primary);">
+      this agent is under developement, if you want to use this agent contact <a href="mailto:mr.riswanth@gmail.com" style="color: var(--accent-primary); text-decoration: underline;">mr.riswanth@gmail.com</a> for get the access to use the agent, if u you want multiple account send the account name in the mail for get acess.
+    </p>
+    <div style="display: flex; justify-content: flex-end;">
+      <button class="btn btn-primary" onclick="window.location.href='mailto:mr.riswanth@gmail.com?subject=Request%20Access%20to%20Mail%20Agent'">Contact Developer</button>
     </div>
   </div>
 </div>

@@ -42,12 +42,21 @@ class AIEngine:
         provider = (settings.get("ai_provider") or "").strip().lower()
         if provider not in {"local", "cloud"}:
             provider = "local" if self._local_available(settings) else "cloud"
+            
+        local_base_url = settings.get("local_base_url") or config.LMSTUDIO_BASE_URL
+        local_model = settings.get("local_model")
+        if local_model is not None:
+            local_model = local_model.strip()
+        if not local_model or local_model.lower() in {"", "auto", "(auto-detect)"}:
+            detected = self._detect_local_model(local_base_url)
+            local_model = detected if detected else config.LMSTUDIO_MODEL
+
         return {
             "ai_provider": provider,
-            "local_base_url": settings.get("local_base_url") or config.LMSTUDIO_BASE_URL,
-            "local_model": settings.get("local_model") or config.LMSTUDIO_MODEL,
-            "cloud_provider": "gemini",
-            "cloud_model": settings.get("cloud_model") or config.GEMINI_MODEL,
+            "local_base_url": local_base_url,
+            "local_model": local_model,
+            "cloud_provider": "nim",
+            "cloud_model": settings.get("cloud_model") or config.NIM_MODEL,
             "force_provider": bool(settings.get("force_provider", False)),
         }
 
@@ -55,7 +64,7 @@ class AIEngine:
         resolved = self.resolve_settings(settings)
         return {
             "local": self._local_available(resolved),
-            "cloud": bool(config.GEMINI_API_KEY),
+            "cloud": bool(config.NVIDIA_API_KEY),
         }
 
     def process_email(
@@ -302,13 +311,38 @@ If no rule matches:
                 history_lines.append(f"Assistant: {msg.get('agent_response', '')}")
             history_block = "\nCONVERSATION HISTORY:\n" + "\n".join(history_lines) + "\n"
 
-        extra_instructions = "Respond in a concise, helpful way. If you suggest a reply, draft it plainly."
-        if "summarize" in question.lower() or "summary" in question.lower() or "short" in question.lower() or "point" in question.lower():
-            extra_instructions = "The user asked for a summary. You MUST provide a VERY SHORT, simple summary using a MAXIMUM of 3 concise bullet points. Do not write a long paragraph. End by asking if they need more info."
+        detailed_keywords = ["detail", "elaborate", "full", "explain", "in-depth", "complete"]
+        is_detail_requested = any(kw in question.lower() for kw in detailed_keywords)
+        
+        if is_detail_requested:
+            extra_instructions = """The user has explicitly requested detailed information. Provide a detailed, comprehensive response.
+Format your response with:
+- Use relevant emojis to make it engaging (📧, 📬, ⚠️, ✅, 📋, 💡, 🔍, etc.)
+- Use bullet points (- ) for listing items; each bullet on its own line
+- Use **bold** for key terms
+- Keep it well structured and easy to read"""
+        elif "summarize" in question.lower() or "summary" in question.lower() or "short" in question.lower() or "point" in question.lower():
+            extra_instructions = """The user asked for a summary. Respond with:
+- Start with a brief 1-sentence overview with an appropriate emoji
+- Use 3-5 bullet points (- ) for the key details, each on its own line
+- End with a friendly emoji like ✅ or 💬 and offer to help further
+Do NOT write long paragraphs."""
+        else:
+            extra_instructions = """Keep the response concise and friendly.
+- Use 1-2 relevant emojis (📧, 📬, ⚡, ✅, 🔍, 💡, etc.) naturally in the text
+- If listing items, use bullet points (- ) with each on its own line
+- Maximum 3-4 sentences or bullet points
+- Sound helpful and friendly, not robotic"""
 
-        prompt = f"""You are a helpful email assistant chatting about the user's {scope_label}.
+        prompt = f"""You are a friendly and helpful email assistant chatting about the user's {scope_label}.
 Answer the user's question using only the provided mail context when possible.
 If the answer is not in the context, say what is missing and suggest the next action.
+
+IMPORTANT FORMATTING RULES:
+- Always use relevant emojis to make responses engaging and friendly
+- Use bullet points (- ) when listing multiple items; put each on its own line
+- Use clear, conversational language — not robotic or overly formal
+- For email content answers, highlight the key info clearly
 {history_block}
 MAIL CONTEXT:
 {context_block}
@@ -317,8 +351,17 @@ QUESTION:
 {question}
 
 {extra_instructions}"""
+
+        # If no context emails, give a helpful fallback reply
+        if not context_emails:
+            prompt = f"""You are a friendly email assistant. The user asked: "{question}"
+There are currently no emails loaded in the system.
+Respond helpfully, suggest they sync their emails first, and answer any general questions you can.
+Use 1-2 emojis and keep it brief."""
+
         raw = self._call_model(prompt, settings=settings, retries=2, max_tokens=700)
-        return raw.strip() if raw else "I could not generate a response."
+        return raw.strip() if raw else "📭 I couldn't generate a response. Please check your AI model connection."
+
 
     def parse_chat_intent(self, message: str, settings: dict | None = None) -> dict:
         """Parse chat message to determine if the user is asking to search for a specific person."""
@@ -346,7 +389,26 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
     def test_provider(self, settings: dict | None = None) -> dict:
         resolved = self.resolve_settings(settings)
         provider = resolved["ai_provider"]
+        
+        endpoint = ""
+        obscured_key = None
+        if provider == "local":
+            base_url = resolved["local_base_url"].rstrip("/")
+            endpoint = f"{base_url}/chat/completions" if base_url.endswith("/v1") else f"{base_url}/v1/chat/completions"
+        else:
+            base_url = config.NVIDIA_BASE_URL.rstrip("/")
+            endpoint = f"{base_url}/chat/completions"
+            key = config.NVIDIA_API_KEY
+            if key:
+                if len(key) > 15:
+                    obscured_key = f"{key[:8]}...{key[-8:]}"
+                else:
+                    obscured_key = "***"
+            else:
+                obscured_key = "(Not set)"
+
         try:
+            start_time = time.time()
             raw = self._call_model(
                 "Reply with exactly: ok",
                 settings=resolved,
@@ -354,12 +416,18 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
                 max_tokens=16,
                 allow_fallback=False,
             )
+            latency = time.time() - start_time
             if not raw:
-                raise RuntimeError("No response returned.")
+                raise RuntimeError("Empty response received from the model.")
+            
             return {
                 "success": True,
                 "provider": provider,
                 "model": self._model_name_for_provider(provider, resolved),
+                "endpoint": endpoint,
+                "latency_sec": round(latency, 2),
+                "response_preview": raw.strip(),
+                "api_key_obscured": obscured_key,
                 "message": f"{provider.title()} model responded successfully.",
             }
         except Exception as exc:
@@ -367,6 +435,8 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
                 "success": False,
                 "provider": provider,
                 "model": self._model_name_for_provider(provider, resolved),
+                "endpoint": endpoint,
+                "api_key_obscured": obscured_key,
                 "error": str(exc),
             }
 
@@ -392,10 +462,10 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
         try:
             if provider == "local":
                 return self._call_lmstudio(prompt, resolved, retries, max_tokens)
-            return self._call_gemini(prompt, resolved, retries)
+            return self._call_nvidia_nim(prompt, resolved, retries, max_tokens)
         except Exception:
-            if allow_fallback and provider == "local" and not force_provider and config.GEMINI_API_KEY:
-                return self._call_gemini(prompt, resolved, retries)
+            if allow_fallback and provider == "local" and not force_provider and config.NVIDIA_API_KEY:
+                return self._call_nvidia_nim(prompt, resolved, retries, max_tokens)
             raise
 
     def _call_lmstudio(self, prompt: str, settings: dict, retries: int, max_tokens: int) -> str:
@@ -424,35 +494,38 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
                 time.sleep((2**attempt) * 2)
         return ""
 
-    def _call_gemini(self, prompt: str, settings: dict, retries: int = 3) -> str:
-        if not config.GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY is not configured.")
+    def _call_nvidia_nim(self, prompt: str, settings: dict, retries: int, max_tokens: int) -> str:
+        api_key = config.NVIDIA_API_KEY
+        if not api_key:
+            raise RuntimeError("NVIDIA_API_KEY is not configured.")
 
-        model_name = settings.get("cloud_model") or config.GEMINI_MODEL
-        if not self._gemini_model or self._gemini_model_name != model_name:
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            self._gemini_model_name = model_name
-            self._gemini_model = genai.GenerativeModel(model_name)
+        base_url = config.NVIDIA_BASE_URL.rstrip("/")
+        endpoint = f"{base_url}/chat/completions"
+        model = settings.get("cloud_model") or config.NIM_MODEL
+
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
 
         for attempt in range(retries):
             try:
-                self._rate_limit()
-                response = self._gemini_model.generate_content(prompt)
-                return response.text
+                response = requests.post(endpoint, json=payload, headers=headers, timeout=60)
+                response.raise_for_status()
+                data = response.json()
+                return self._extract_openai_content(data)
             except Exception as exc:
                 if attempt == retries - 1:
-                    raise RuntimeError(f"Gemini request failed: {exc}") from exc
+                    raise RuntimeError(f"Nvidia NIM request failed: {exc}") from exc
                 time.sleep((2**attempt) * 2)
         return ""
-
-    def _rate_limit(self):
-        self._request_count += 1
-        now = time.time()
-        elapsed = now - self._last_request_time
-        if self._request_count % 14 == 0 and elapsed < 60:
-            time.sleep(max(2, 62 - elapsed))
-            self._request_count = 0
-        self._last_request_time = time.time()
 
     def _parse_json_response(self, raw: str, fallback: dict) -> dict:
         try:
@@ -527,4 +600,4 @@ If they are NOT asking about any person (e.g. "Summarize my unread emails", "Wri
             return False
 
     def _model_name_for_provider(self, provider: str, settings: dict) -> str:
-        return settings.get("local_model") if provider == "local" else settings.get("cloud_model") or config.GEMINI_MODEL
+        return settings.get("local_model") if provider == "local" else settings.get("cloud_model") or config.NIM_MODEL

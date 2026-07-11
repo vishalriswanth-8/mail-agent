@@ -378,9 +378,9 @@ class DBManager:
             params.append(1 if is_important else 0)
 
         if search:
-            query += " AND (subject LIKE ? OR sender LIKE ? OR summary LIKE ?)"
+            query += " AND (subject LIKE ? OR sender LIKE ? OR summary LIKE ? OR body LIKE ? OR snippet LIKE ? OR short_summary LIKE ?)"
             search_term = f"%{search}%"
-            params.extend([search_term, search_term, search_term])
+            params.extend([search_term, search_term, search_term, search_term, search_term, search_term])
 
         query += " ORDER BY internal_date DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
@@ -388,6 +388,7 @@ class DBManager:
         rows = conn.execute(query, params).fetchall()
         conn.close()
         return [dict(row) for row in rows]
+
 
     def get_email_by_id(self, email_id: int) -> dict | None:
         """Get a single email by its database ID."""

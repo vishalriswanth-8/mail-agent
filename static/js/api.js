@@ -160,7 +160,6 @@ const API = {
     return r.json();
   },
 
-  // ─── Chat ─────────────────────────────────────────────────
   async chat(message, scope, account, session_id) {
     const r = await fetch('/api/chat', {
       method: 'POST',
@@ -173,6 +172,11 @@ const API = {
     const r = await fetch(`/api/chat/history?session_id=${encodeURIComponent(session_id)}&limit=${limit}`);
     return r.json();
   },
+  async getChatSessions() {
+    const r = await fetch('/api/chat/sessions');
+    return r.json();
+  },
+
 
   // ─── Agent ────────────────────────────────────────────────
   async generateDraftReply(emailId, scope = 'professional') {
@@ -207,6 +211,14 @@ const API = {
   },
   async deleteRule(id) {
     const r = await fetch(`/api/agent/rules/${id}`, { method: 'DELETE' });
+    return r.json();
+  },
+  async sendChatMessage(message, email_id, scope, session_id) {
+    const r = await fetch('/api/chat/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, email_id, scope, session_id }),
+    });
     return r.json();
   },
 

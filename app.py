@@ -58,15 +58,15 @@ def get_ai_settings() -> dict:
     stored = {
         "ai_provider": db.get_setting("ai_provider", ""),
         "local_base_url": db.get_setting("local_base_url", config.LMSTUDIO_BASE_URL),
-        "local_model": db.get_setting("local_model", config.LMSTUDIO_MODEL),
-        "cloud_provider": db.get_setting("cloud_provider", "gemini"),
-        "cloud_model": db.get_setting("cloud_model", config.GEMINI_MODEL),
+        "local_model": db.get_setting("local_model", ""),
+        "cloud_provider": db.get_setting("cloud_provider", "nim"),
+        "cloud_model": db.get_setting("cloud_model", config.NIM_MODEL),
         "force_provider": db.get_setting("force_provider", "false").lower() == "true",
     }
     return ai_engine.resolve_settings(stored)
 
 
-def _fetch_scope_emails(scope: str = "all", account: str | None = None, email_id: int | None = None, limit: int = 12) -> list[dict]:
+def _fetch_scope_emails(scope: str = "all", account: str | None = None, email_id: int | None = None, limit: int = 50) -> list[dict]:
     """Collect email rows for chat/task context."""
     if email_id:
         row = db.get_email_by_id(email_id)
@@ -625,8 +625,8 @@ def update_settings():
                 print(f"[Settings] Switching to {value} model")
                 db.log_event("model_switch", f"Switched AI provider to {value}", {"provider": value})
             elif key == "cloud_provider":
-                if value not in {"gemini", "", None}:
-                    return jsonify({"success": False, "error": "Only Gemini cloud provider is supported"}), 400
+                if value not in {"nim", "gemini", "", None}:
+                    return jsonify({"success": False, "error": "Only Nvidia NIM is supported"}), 400
             elif key == "force_provider":
                 value = "true" if value else "false"
 
@@ -1145,9 +1145,18 @@ def accept_suggestion(suggestion_id):
     return jsonify({"success": True, "message": "Suggestion accepted"})
 
 
-# ============================================================
-# Chat API
-# ============================================================
+def detect_topic_search(message: str) -> str | None:
+    """Detect if query is of type 'emails related to <something>' and extract topic."""
+    import re
+    cleaned = message.strip().strip("'\"").strip()
+    match = re.search(r'(?:emails?|mails?)\s+related\s+to\s+([a-zA-Z0-9\s_\-]+)', cleaned, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    match = re.search(r'related\s+to\s+([a-zA-Z0-9\s_\-]+)\s+(?:emails?|mails?)', cleaned, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
 
 @app.route("/api/chat", methods=["POST"])
 def chat_mail():
@@ -1161,53 +1170,114 @@ def chat_mail():
     account = data.get("account")
     email_id = data.get("email_id")
     session_id = data.get("session_id", str(uuid.uuid4()))
-    limit = int(data.get("limit", 12))
+    limit = int(data.get("limit", 50))  # increased from 12 to fetch more emails
     
     settings = get_ai_settings()
     
-    # Hidden command to explicitly fetch a contact's emails
-    if message.startswith("/summarize_contact "):
-        contact_email = message.replace("/summarize_contact ", "").strip()
-        context_emails = db.get_emails(search=contact_email, limit=limit)
-        message = f"Give me a very short, simple, interactive summary of emails from {contact_email} as 2-3 bullet points. Tell me to ask for more info if needed."
-    else:
-        # 1. Parse intent
-        intent_res = ai_engine.parse_chat_intent(message, settings=settings)
-        if intent_res.get("intent") == "search_person" and intent_res.get("name"):
-            name = intent_res["name"]
-            contacts = db.search_contacts(name)
-            
-            if len(contacts) > 0:
-                # Deduplicate by email
-                unique_emails = {}
-                for c in contacts:
-                    if c['sender_email'] and c['sender_email'] not in unique_emails:
-                        unique_emails[c['sender_email']] = c
-                
-                deduped_contacts = list(unique_emails.values())
-                
-                # Multiple matches: Ask user to clarify with buttons
-                reply = f"I found the following contacts matching '{name}'. Which one do you want to summarize?"
-                options = [{"label": f"{c['sender'] or c['sender_email']}", "action": f"/summarize_contact {c['sender_email']}"} for c in deduped_contacts[:5]]
-                
+    # ─── New Interceptor Logic ───
+    if message.startswith("/info_email "):
+        email_part = message.replace("/info_email ", "").strip()
+        email_id_str = email_part.split("|")[0]
+        try:
+            email_id = int(email_id_str)
+            email_info = db.get_email_by_id(email_id)
+            if email_info:
+                reply = ai_engine.chat_about_mail(
+                    "Summarize what this email is about.",
+                    context_emails=[email_info],
+                    settings=settings,
+                    scope_label=scope,
+                    history=[]
+                )
                 db.add_chat_message(session_id, message, reply, scope=scope)
                 return jsonify({
                     "success": True,
                     "reply": reply,
-                    "options": options,
                     "scope": scope,
                     "session_id": session_id,
-                    "email_count": 0,
+                    "email_count": 1,
+                    "email_links": [{"id": email_info["id"], "subject": email_info.get("subject", "Email")}],
                 })
-            else:
-                # Fallback to normal scope
-                context_emails = _fetch_scope_emails(scope=scope, account=account, email_id=email_id, limit=limit)
-        else:
-            # Normal chat
-            context_emails = _fetch_scope_emails(scope=scope, account=account, email_id=email_id, limit=limit)
+        except Exception as e:
+            pass
 
+    topic = detect_topic_search(message)
+    if topic:
+        matching_emails = db.get_emails(search=topic, limit=20)
+        if len(matching_emails) > 1:
+            reply = f"I found several emails related to '{topic}'. Which one would you like to know more about?"
+            options = [
+                {
+                    "label": f"Email #{e['id']}: {e.get('subject', 'No Subject')}",
+                    "action": f"/info_email {e['id']}|{e.get('subject', 'No Subject')}"
+                }
+                for e in matching_emails[:5]
+            ]
+            db.add_chat_message(session_id, message, reply, scope=scope)
+            return jsonify({
+                "success": True,
+                "reply": reply,
+                "options": options,
+                "scope": scope,
+                "session_id": session_id,
+                "email_count": len(matching_emails),
+            })
+        elif len(matching_emails) == 1:
+            single_email = matching_emails[0]
+            reply = ai_engine.chat_about_mail(
+                "Summarize what this email is about.",
+                context_emails=[single_email],
+                settings=settings,
+                scope_label=scope,
+                history=[]
+            )
+            db.add_chat_message(session_id, message, reply, scope=scope)
+            return jsonify({
+                "success": True,
+                "reply": reply,
+                "scope": scope,
+                "session_id": session_id,
+                "email_count": 1,
+                "email_links": [{"id": single_email["id"], "subject": single_email.get("subject", "Email")}],
+            })
+        else:
+            reply = f"I couldn't find any emails related to '{topic}'."
+            db.add_chat_message(session_id, message, reply, scope=scope)
+            return jsonify({
+                "success": True,
+                "reply": reply,
+                "scope": scope,
+                "session_id": session_id,
+                "email_count": 0,
+            })
+
+    # Fallback: search broadly across ALL emails (not just recent)
+    # First try keyword search using message content
+    import re
+    keywords = re.findall(r'\b[a-zA-Z]{3,}\b', message)
+    context_emails = []
+    
+    # Try keyword search first to find relevant old emails
+    if keywords:
+        search_term = ' '.join(keywords[:3])
+        context_emails = db.get_emails(account=account or None, search=search_term, limit=30)
+    
+    # If no keyword match, fall back to recent emails (broad context)
     if not context_emails:
-        return jsonify({"success": False, "error": "No email context found"}), 404
+        context_emails = _fetch_scope_emails(scope=scope, account=account, email_id=email_id, limit=50)
+    
+    # If still nothing, let AI answer generically
+    if not context_emails:
+        history = db.get_chat_history(session_id, limit=10) if session_id else []
+        reply = ai_engine.chat_about_mail(
+            message,
+            context_emails=[],
+            settings=settings,
+            scope_label=scope,
+            history=history,
+        ) if hasattr(ai_engine, 'chat_about_mail') else "\ud83d\udce2 I don't have any emails in my database yet. Please sync your emails first by clicking the Sync button!"
+        db.add_chat_message(session_id, message, reply, scope=scope)
+        return jsonify({"success": True, "reply": reply, "scope": scope, "session_id": session_id, "email_count": 0, "email_links": []})
 
     # Get chat history for context
     history = db.get_chat_history(session_id, limit=10) if session_id else []
@@ -1222,12 +1292,18 @@ def chat_mail():
 
     db.add_chat_message(session_id, message, reply, scope=scope)
 
+    # If user asked about a single specific email, attach an open link
+    email_links = []
+    if email_id and len(context_emails) == 1:
+        email_links = [{"id": context_emails[0]["id"], "subject": context_emails[0].get("subject", "Email")}]
+
     return jsonify({
         "success": True,
         "reply": reply,
         "scope": scope,
         "session_id": session_id,
         "email_count": len(context_emails),
+        "email_links": email_links,
     })
 
 
@@ -1247,6 +1323,88 @@ def send_chat_message():
     if not user_message:
         return jsonify({"success": False, "error": "Message is required"}), 400
 
+    # 1. Check for /info_email slash command
+    if user_message.startswith("/info_email "):
+        email_part = user_message.replace("/info_email ", "").strip()
+        email_id_str = email_part.split("|")[0]
+        try:
+            email_id = int(email_id_str)
+            email_info = db.get_email_by_id(email_id)
+            if email_info:
+                response = agent.generate_chat_response(
+                    "Summarize what this email is about.",
+                    email=email_info,
+                    scope=scope,
+                    settings=get_ai_settings(),
+                    history=[]
+                )
+                agent_res_text = response.get("response") if isinstance(response, dict) else response
+                db.add_chat_message(session_id, user_message, agent_res_text, email_id=email_id, scope=scope)
+                return jsonify({
+                    "success": True,
+                    "session_id": session_id,
+                    "user_message": user_message,
+                    "agent_response": agent_res_text,
+                    "scope": scope,
+                    "options": []
+                })
+        except Exception as e:
+            pass
+
+    # 2. Check for topic-based search
+    topic = detect_topic_search(user_message)
+    if topic:
+        matching_emails = db.get_emails(search=topic, limit=20)
+        if len(matching_emails) > 1:
+            reply = f"I found several emails related to '{topic}'. Which one would you like to know more about?"
+            options = [
+                {
+                    "label": f"Email #{e['id']}: {e.get('subject', 'No Subject')}",
+                    "action": f"/info_email {e['id']}|{e.get('subject', 'No Subject')}"
+                }
+                for e in matching_emails[:5]
+            ]
+            db.add_chat_message(session_id, user_message, reply, scope=scope)
+            return jsonify({
+                "success": True,
+                "session_id": session_id,
+                "user_message": user_message,
+                "agent_response": reply,
+                "scope": scope,
+                "options": options
+            })
+        elif len(matching_emails) == 1:
+            single_email = matching_emails[0]
+            response = agent.generate_chat_response(
+                "Summarize what this email is about.",
+                email=single_email,
+                scope=scope,
+                settings=get_ai_settings(),
+                history=[]
+            )
+            agent_res_text = response.get("response") if isinstance(response, dict) else response
+            db.add_chat_message(session_id, user_message, agent_res_text, email_id=single_email["id"], scope=scope)
+            return jsonify({
+                "success": True,
+                "session_id": session_id,
+                "user_message": user_message,
+                "agent_response": agent_res_text,
+                "scope": scope,
+                "options": []
+            })
+        else:
+            reply = f"I couldn't find any emails related to '{topic}'."
+            db.add_chat_message(session_id, user_message, reply, scope=scope)
+            return jsonify({
+                "success": True,
+                "session_id": session_id,
+                "user_message": user_message,
+                "agent_response": reply,
+                "scope": scope,
+                "options": []
+            })
+
+    # 3. Fallback to default chat behavior
     email = None
     if email_id:
         email = db.get_email_by_id(email_id)
@@ -1262,14 +1420,18 @@ def send_chat_message():
         history=history,
     )
 
-    db.add_chat_message(session_id, user_message, response, email_id=email_id, scope=scope)
+    agent_res_text = response.get("response") if isinstance(response, dict) else response
+    options = response.get("options") if isinstance(response, dict) else []
+
+    db.add_chat_message(session_id, user_message, agent_res_text, email_id=email_id, scope=scope)
 
     return jsonify({
         "success": True,
         "session_id": session_id,
         "user_message": user_message,
-        "agent_response": response,
-        "scope": scope
+        "agent_response": agent_res_text,
+        "scope": scope,
+        "options": options
     })
 
 
@@ -1287,9 +1449,59 @@ def get_chat_history():
     return jsonify({"history": history, "session_id": session_id})
 
 
+@app.route("/api/chat/sessions", methods=["GET"])
+def get_chat_sessions():
+    """Get list of all chat sessions with their first message as title."""
+    try:
+        conn = db._get_conn()
+        rows = conn.execute("""
+            SELECT session_id,
+                   MIN(created_at) as created_at,
+                   MAX(created_at) as last_message_at,
+                   COUNT(*) as message_count,
+                   (SELECT user_message FROM chat_history h2
+                    WHERE h2.session_id = chat_history.session_id
+                      AND user_message NOT LIKE '/%'
+                    ORDER BY created_at ASC LIMIT 1) as first_message,
+                   (SELECT user_message FROM chat_history h3
+                    WHERE h3.session_id = chat_history.session_id
+                    ORDER BY created_at ASC LIMIT 1) as any_message
+            FROM chat_history
+            GROUP BY session_id
+            ORDER BY last_message_at DESC
+            LIMIT 50
+        """).fetchall()
+        conn.close()
+        sessions = []
+        for row in rows:
+            d = dict(row)
+            # Use non-slash first message as title, fall back to any message
+            raw_title = d.get("first_message") or d.get("any_message") or "New Chat"
+            # Strip slash commands from display
+            if raw_title.startswith("/info_email "):
+                parts = raw_title.replace("/info_email ", "").split("|")
+                raw_title = f"📧 Email: {parts[1]}" if len(parts) > 1 else f"Email #{parts[0]}"
+            elif raw_title.startswith("/summarize_contact "):
+                raw_title = f"📋 {raw_title.replace('/summarize_contact ', '')}"
+            # Truncate to 40 chars
+            title = raw_title[:37] + "..." if len(raw_title) > 40 else raw_title
+            sessions.append({
+                "session_id": d["session_id"],
+                "title": title,
+                "created_at": d["created_at"],
+                "last_message_at": d["last_message_at"],
+                "message_count": d["message_count"],
+            })
+        return jsonify({"sessions": sessions})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"sessions": [], "error": str(e)})
+
+
 # ============================================================
 # Run
 # ============================================================
+
 
 if __name__ == "__main__":
     print("\n" + "=" * 60)

@@ -163,7 +163,7 @@ CURRENT EMAIL CONTEXT:
             search_terms = self._extract_search_terms(user_message)
             
             if search_terms:
-                all_emails = db.get_emails(account=None, limit=100)
+                all_emails = self.db.get_emails(account=None, limit=100)
                 matching_emails = [e for e in all_emails 
                                   if any(term.lower() in (e.get('subject', '').lower() + ' ' + e.get('sender', '')).lower() 
                                           for term in search_terms)]
@@ -182,13 +182,22 @@ CURRENT EMAIL CONTEXT:
 
         scope_info = self.SCOPES.get(scope, "professional")
 
+        detailed_keywords = ["detail", "elaborate", "full", "explain", "in-depth", "complete"]
+        is_detail_requested = any(kw in user_message.lower() for kw in detailed_keywords)
+
+        if is_detail_requested:
+            instructions = "Provide a detailed, comprehensive response."
+        else:
+            instructions = "Keep the response extremely short, crisp, and to the point. Provide a maximum of 2 sentences or minimal bullet points. Do not write long paragraphs. If they want detailed info, they will ask for it."
+
         prompt = f"""You are a helpful email assistant. Answer the user's question about their email in a {scope} manner.
 
 {context}
 {history_block}
 User: {user_message}
 
-Respond helpfully and concisely (2-3 sentences max). Focus on being practical and actionable."""
+{instructions}
+Focus on being practical and actionable."""
 
         try:
             response = self.ai_engine._call_model(prompt, settings=settings, max_tokens=300)
@@ -200,7 +209,7 @@ Respond helpfully and concisely (2-3 sentences max). Focus on being practical an
                     "success": True,
                     "response": self._generate_general_response(user_message, matching_emails),
                     "has_options": True,
-                    "options": [{"id": e["id"], "subject": e.get("subject", ""), "sender": e.get("sender", "")} 
+                    "options": [{"label": f"Email #{e['id']}: {e.get('subject', 'No Subject')}", "action": f"/info_email {e['id']}|{e.get('subject', 'No Subject')}"} 
                                for e in matching_emails[:5]],  # Show top 5 options
                     "email_count": len(matching_emails)
                 }
@@ -264,8 +273,8 @@ Respond helpfully and concisely (2-3 sentences max). Focus on being practical an
             "success": True,
             "response": response_text,
             "has_options": True,
-            "options": [{"id": e["id"], "subject": e.get("subject", ""), "sender": e.get("sender", "")} 
-                       for e in matching_emails[:5]],
+            "options": [{"label": f"Email #{e['id']}: {e.get('subject', 'No Subject')}", "action": f"/info_email {e['id']}|{e.get('subject', 'No Subject')}"} 
+                        for e in matching_emails[:5]],
             "email_count": len(matching_emails)
         }
 
