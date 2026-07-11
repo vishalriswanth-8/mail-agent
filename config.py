@@ -17,7 +17,7 @@ GMAIL_SCOPES = [
 ]
 
 # --- AI Providers ---
-GEMINI_API_KEY = "AIzaSyB7UmQqBETJu3d3uUo4KU0E4-xHtZnW-QU"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
